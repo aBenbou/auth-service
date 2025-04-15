@@ -1,0 +1,24 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
+
+# Copy application code
+COPY . .
+
+# Set environment variables for testing
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    FLASK_ENV=testing \
+    TESTING=True \
+    DATABASE_URI=sqlite:///:memory: \
+    SECRET_KEY=test-key \
+    JWT_SECRET_KEY=test-jwt-key \
+    REDIS_HOST=localhost \
+    MAIL_DEFAULT_SENDER=test@example.com
+
+# Run pytest when the container launches
+CMD ["pytest", "--cov=app", "--cov-report=term-missing"] 

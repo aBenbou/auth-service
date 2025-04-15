@@ -1,0 +1,8 @@
+-r requirements.txt
+pytest==7.4.0
+pytest-cov==4.1.0
+pytest-mock==3.11.1
+coverage==7.3.1
+fakeredis==2.20.0
+responses==0.23.3
+freezegun==1.2.2 
