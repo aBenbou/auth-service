@@ -8,4 +8,4 @@ DROP INDEX IF EXISTS idx_roles_name;
 DROP INDEX IF EXISTS idx_roles_service_id;
 
 -- Drop the table
-DROP TABLE IF EXISTS roles; 
+DROP TABLE IF EXISTS roles CASCADE;

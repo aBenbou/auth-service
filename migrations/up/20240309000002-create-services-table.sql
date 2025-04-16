@@ -4,7 +4,7 @@
 -- Write your UP migration SQL here
 
 CREATE TABLE IF NOT EXISTS services (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     public_id VARCHAR(36) NOT NULL UNIQUE,
     name VARCHAR(100) NOT NULL UNIQUE,
     description VARCHAR(255),
@@ -17,4 +17,4 @@ CREATE TABLE IF NOT EXISTS services (
 CREATE INDEX IF NOT EXISTS idx_services_name ON services(name);
 
 -- Create index on public_id for faster lookups
-CREATE INDEX IF NOT EXISTS idx_services_public_id ON services(public_id); 
+CREATE INDEX IF NOT EXISTS idx_services_public_id ON services(public_id);

@@ -8,4 +8,4 @@ DROP INDEX IF EXISTS idx_app_tokens_token;
 DROP INDEX IF EXISTS idx_app_tokens_service_id;
 
 -- Drop the table
-DROP TABLE IF EXISTS app_tokens; 
+DROP TABLE IF EXISTS app_tokens CASCADE;

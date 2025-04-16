@@ -17,6 +17,10 @@ def create_migration(name):
     timestamp = get_timestamp()
     filename = f"{timestamp}-{name.replace(' ', '_').lower()}.sql"
     
+    # Create migrations directories if they don't exist
+    os.makedirs(os.path.join("migrations", "up"), exist_ok=True)
+    os.makedirs(os.path.join("migrations", "down"), exist_ok=True)
+    
     # Create up migration file
     up_path = os.path.join("migrations", "up", filename)
     with open(up_path, "w") as f:
@@ -35,72 +39,71 @@ def create_migration(name):
     print(f"  - {up_path}")
     print(f"  - {down_path}")
 
-def ensure_migrations_table(conn, cursor):
-    """Ensure the migrations tracking table exists"""
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS migrations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
-    conn.commit()
+def get_db_connection():
+    """Get a database connection based on the configured DATABASE_URI"""
+    db_uri = os.getenv('DATABASE_URI', Config.SQLALCHEMY_DATABASE_URI)
+    
+    if db_uri.startswith('postgresql://') or db_uri.startswith('postgres://'):
+        # PostgreSQL connection
+        match = re.match(r'postgres(?:ql)?://([^:]+):([^@]+)@([^:]+):(\d+)/([^?]+)', db_uri)
+        if match:
+            user, password, host, port, dbname = match.groups()
+            conn = psycopg2.connect(
+                host=host,
+                port=port,
+                dbname=dbname,
+                user=user,
+                password=password
+            )
+            return conn, 'postgresql'
+        else:
+            raise ValueError(f"Invalid PostgreSQL connection string: {db_uri}")
+    else:
+        # SQLite connection (for development/testing)
+        sqlite_path = db_uri.replace('sqlite:///', '')
+        conn = sqlite3.connect(sqlite_path)
+        return conn, 'sqlite'
 
-def ensure_migrations_table_postgres(conn, cursor):
-    """Ensure the migrations tracking table exists for PostgreSQL"""
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS migrations (
-        id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL,
-        applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
+def ensure_migrations_table(conn, db_type):
+    """Ensure the migrations tracking table exists"""
+    cursor = conn.cursor()
+    
+    if db_type == 'postgresql':
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS migrations (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+    else:  # sqlite
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS migrations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+    
     conn.commit()
+    return cursor
 
 def get_applied_migrations(cursor):
     """Get list of applied migrations"""
     cursor.execute("SELECT name FROM migrations ORDER BY id")
     return [row[0] for row in cursor.fetchall()]
 
-def run_migration(conn, cursor, migration_path, migration_name):
+def run_migration(conn, cursor, migration_path, migration_name, db_type):
     """Run a single migration file"""
     with open(migration_path, "r") as f:
         sql = f.read()
     
-    # Split the SQL into individual statements
-    statements = sql.split(';')
-    
-    # Execute each statement
-    for statement in statements:
-        # Skip empty statements
-        if statement.strip():
-            cursor.execute(statement)
-    
-    # Record the migration
-    cursor.execute("INSERT INTO migrations (name) VALUES (?)", (migration_name,))
-    conn.commit()
-    print(f"Applied: {migration_name}")
-
-def run_migration_postgres(conn, cursor, migration_path, migration_name):
-    """Run a single migration file for PostgreSQL"""
-    with open(migration_path, "r") as f:
-        sql = f.read()
-    
-    # Execute the migration
-    cursor.execute(sql)
-    
-    # Record the migration
-    cursor.execute("INSERT INTO migrations (name) VALUES (%s)", (migration_name,))
-    conn.commit()
-    print(f"Applied: {migration_name}")
-
-def remove_migration(conn, cursor, migration_name):
-    """Remove a migration from the tracking table"""
-    migration_path = os.path.join("migrations", "down", migration_name)
-    if os.path.exists(migration_path):
-        with open(migration_path, "r") as f:
-            sql = f.read()
-        
+    if db_type == 'postgresql':
+        # For PostgreSQL, execute as a single statement (supports multi-statement scripts)
+        cursor.execute(sql)
+        # Record the migration
+        cursor.execute("INSERT INTO migrations (name) VALUES (%s)", (migration_name,))
+    else:  # sqlite
         # Split the SQL into individual statements
         statements = sql.split(';')
         
@@ -110,34 +113,53 @@ def remove_migration(conn, cursor, migration_name):
             if statement.strip():
                 cursor.execute(statement)
         
-        # Remove the migration record
-        cursor.execute("DELETE FROM migrations WHERE name = ?", (migration_name,))
+        # Record the migration
+        cursor.execute("INSERT INTO migrations (name) VALUES (?)", (migration_name,))
+    
+    conn.commit()
+    print(f"Applied: {migration_name}")
+
+def remove_migration(conn, cursor, migration_path, migration_name, db_type):
+    """Remove a migration from the tracking table"""
+    if os.path.exists(migration_path):
+        with open(migration_path, "r") as f:
+            sql = f.read()
+        
+        if db_type == 'postgresql':
+            # For PostgreSQL, execute as a single statement
+            cursor.execute(sql)
+            # Remove the migration record
+            cursor.execute("DELETE FROM migrations WHERE name = %s", (migration_name,))
+        else:  # sqlite
+            # Split the SQL into individual statements
+            statements = sql.split(';')
+            
+            # Execute each statement
+            for statement in statements:
+                # Skip empty statements
+                if statement.strip():
+                    cursor.execute(statement)
+            
+            # Remove the migration record
+            cursor.execute("DELETE FROM migrations WHERE name = ?", (migration_name,))
+        
         conn.commit()
         print(f"Reverted: {migration_name}")
     else:
         print(f"Warning: Down migration file not found for {migration_name}")
 
-def remove_migration_postgres(conn, cursor, migration_name):
-    """Remove a migration from the tracking table for PostgreSQL"""
-    cursor.execute("DELETE FROM migrations WHERE name = %s", (migration_name,))
-    conn.commit()
-    print(f"Reverted: {migration_name}")
-
 def run_migrations(direction, steps=None):
     """Run migrations in the specified direction (up or down)"""
-    # Use SQLite for testing
-    db_path = 'auth.db'
+    conn, db_type = get_db_connection()
+    cursor = ensure_migrations_table(conn, db_type)
     
-    print(f"Using SQLite database: {db_path}")
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    ensure_migrations_table(conn, cursor)
+    print(f"Using {db_type.upper()} database")
     
     applied_migrations = get_applied_migrations(cursor)
     
     if direction == 'up':
         # Get all migration files
-        migration_files = sorted(os.listdir(os.path.join("migrations", "up")))
+        migration_files = sorted([f for f in os.listdir(os.path.join("migrations", "up")) if f.endswith('.sql')])
         
         # Filter out already applied migrations
         pending_migrations = [f for f in migration_files if f not in applied_migrations]
@@ -149,7 +171,7 @@ def run_migrations(direction, steps=None):
         # Apply migrations
         for migration in pending_migrations:
             migration_path = os.path.join("migrations", "up", migration)
-            run_migration(conn, cursor, migration_path, migration)
+            run_migration(conn, cursor, migration_path, migration, db_type)
     
     elif direction == 'down':
         # Get applied migrations in reverse order
@@ -161,7 +183,8 @@ def run_migrations(direction, steps=None):
         
         # Revert migrations
         for migration in migrations_to_revert:
-            remove_migration(conn, cursor, migration)
+            migration_path = os.path.join("migrations", "down", migration)
+            remove_migration(conn, cursor, migration_path, migration, db_type)
     
     conn.close()
 
@@ -193,4 +216,4 @@ def main():
         parser.print_help()
 
 if __name__ == "__main__":
-    main() 
+    main()

@@ -4,7 +4,7 @@
 -- Write your UP migration SQL here
 
 CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     public_id VARCHAR(36) NOT NULL UNIQUE,
     email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(128),
@@ -27,4 +27,4 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
 -- Create index on public_id for faster lookups
-CREATE INDEX IF NOT EXISTS idx_users_public_id ON users(public_id); 
+CREATE INDEX IF NOT EXISTS idx_users_public_id ON users(public_id);

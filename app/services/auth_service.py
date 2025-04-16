@@ -1,13 +1,15 @@
 import uuid
 import secrets
+import requests
 from datetime import datetime, timedelta
 from flask import current_app
-from flask_jwt_extended import create_access_token, create_refresh_token
+from flask_jwt_extended import create_access_token, create_refresh_token, decode_token, verify_jwt_in_request
 from app import db
 from app.models.user import User
 from app.services.redis_service import add_user_session, remove_user_session, invalidate_all_user_sessions
 from app.services.email_service import send_password_reset_email, send_verification_email
 from typing import Dict, Any, Optional
+from jwt.exceptions import PyJWTError
 
 def register_user(email, password, first_name=None, last_name=None):
     """Register a new user and send verification email"""
@@ -166,24 +168,34 @@ def change_password(user_id, current_password, new_password):
     # We'll keep the current session active
     # This will be handled by the API endpoint
     
-    return {'success': True, 'message': 'Password changed successfully'} 
+    return {'success': True, 'message': 'Password changed successfully'}
 
 def validate_token(token: str) -> Dict[str, Any]:
-    """Validate a JWT token with the Auth Service"""
+    """Validate a JWT token directly without making an HTTP request"""
     try:
-        auth_service_url = current_app.config['AUTH_SERVICE_URL']
-        response = requests.get(
-            f"{auth_service_url}/api/auth/validate-jwt",  # Updated endpoint
-            headers={"Authorization": f"Bearer {token}"}
-        )
+        # Decode and verify the token directly
+        decoded_token = decode_token(token)
+        user_id = decoded_token['sub']
         
-        if response.status_code == 200:
-            return response.json()
-        else:
+        # Check if user exists
+        user = User.query.filter_by(public_id=user_id).first()
+        if not user:
             return {
                 'success': False,
-                'message': 'Invalid token'
+                'message': 'User not found'
             }
+            
+        return {
+            'success': True,
+            'user_id': user_id,
+            'user': user.to_dict()
+        }
+    except PyJWTError as e:
+        current_app.logger.error(f"Invalid token: {str(e)}")
+        return {
+            'success': False,
+            'message': 'Invalid token'
+        }
     except Exception as e:
         current_app.logger.error(f"Error validating token: {str(e)}")
         return {

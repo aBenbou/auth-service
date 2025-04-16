@@ -4,7 +4,7 @@
 -- Write your UP migration SQL here
 
 CREATE TABLE IF NOT EXISTS role_permissions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     role_id INTEGER NOT NULL,
     permission_id INTEGER NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -17,4 +17,4 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 CREATE INDEX IF NOT EXISTS idx_role_permissions_role_id ON role_permissions(role_id);
 
 -- Create index on permission_id for faster lookups
-CREATE INDEX IF NOT EXISTS idx_role_permissions_permission_id ON role_permissions(permission_id); 
+CREATE INDEX IF NOT EXISTS idx_role_permissions_permission_id ON role_permissions(permission_id);

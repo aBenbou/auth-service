@@ -10,6 +10,15 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URI', 'sqlite:///auth.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
+    # PostgreSQL-specific settings
+    if SQLALCHEMY_DATABASE_URI.startswith('postgresql://') or SQLALCHEMY_DATABASE_URI.startswith('postgres://'):
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            'pool_size': int(os.getenv('DB_POOL_SIZE', 5)),
+            'max_overflow': int(os.getenv('DB_MAX_OVERFLOW', 10)),
+            'pool_timeout': int(os.getenv('DB_POOL_TIMEOUT', 30)),
+            'pool_recycle': int(os.getenv('DB_POOL_RECYCLE', 1800)),
+        }
+    
     # Redis configuration
     REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
     REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
@@ -59,10 +68,11 @@ class Config:
     # Application settings
     APP_NAME = os.getenv('APP_NAME', 'Authentication API')
     APP_BASE_URL = os.getenv('APP_BASE_URL', 'http://localhost:5000')
+    AUTH_SERVICE_URL = os.getenv('AUTH_SERVICE_URL', 'http://localhost:5000/api')
     PASSWORD_RESET_TOKEN_EXPIRES = _parse_int_env('PASSWORD_RESET_TOKEN_EXPIRES', 3600)
     SESSION_LIMIT_PER_USER = _parse_int_env('SESSION_LIMIT_PER_USER', 5)
     
     # OAuth callback URLs
     GOOGLE_CALLBACK_URL = f"{APP_BASE_URL}/api/oauth/google/callback"
     MICROSOFT_CALLBACK_URL = f"{APP_BASE_URL}/api/oauth/microsoft/callback"
-    DISCORD_CALLBACK_URL = f"{APP_BASE_URL}/api/oauth/discord/callback" 
+    DISCORD_CALLBACK_URL = f"{APP_BASE_URL}/api/oauth/discord/callback"

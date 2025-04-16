@@ -1,42 +1,76 @@
 version: '3.8'
 
 services:
-  auth_api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+  app:
+    build: .
+    container_name: auth_api
+    restart: always
     ports:
       - "5000:5000"
     depends_on:
-      - db
-      - redis
-    env_file:
-      - .env
+      auth_db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - DATABASE_URI=postgresql://postgres:postgres@auth_db:5432/auth_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     volumes:
-      - ./:/app
-    restart: unless-stopped
+      - .:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
-  db:
-    image: postgres:15
+  auth_db:
+    image: postgres:15-alpine
+    container_name: auth_db
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=auth_db
     ports:
       - "5432:5432"
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: auth_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
+      - ./postgres-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   redis:
-    image: redis:7
+    image: redis:7-alpine
+    container_name: auth_redis
+    restart: always
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    restart: unless-stopped
-    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: auth_pgadmin
+    restart: always
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@example.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - auth_db
 
 volumes:
   postgres_data:
-  redis_data: 
+  redis_data:

@@ -4,7 +4,7 @@
 -- Write your UP migration SQL here
 
 CREATE TABLE IF NOT EXISTS app_tokens (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     token VARCHAR(64) NOT NULL UNIQUE,
     name VARCHAR(100) NOT NULL,
     service_id INTEGER NOT NULL,
@@ -19,4 +19,4 @@ CREATE TABLE IF NOT EXISTS app_tokens (
 CREATE INDEX IF NOT EXISTS idx_app_tokens_token ON app_tokens(token);
 
 -- Create index on service_id for faster lookups
-CREATE INDEX IF NOT EXISTS idx_app_tokens_service_id ON app_tokens(service_id); 
+CREATE INDEX IF NOT EXISTS idx_app_tokens_service_id ON app_tokens(service_id);

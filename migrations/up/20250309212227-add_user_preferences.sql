@@ -4,7 +4,7 @@
 -- Write your UP migration SQL here
 
 CREATE TABLE IF NOT EXISTS user_preferences (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     preference_key VARCHAR(100) NOT NULL,
     preference_value TEXT,
@@ -19,4 +19,3 @@ CREATE INDEX IF NOT EXISTS idx_user_preferences_user_id ON user_preferences(user
 
 -- Create index on preference_key for faster lookups
 CREATE INDEX IF NOT EXISTS idx_user_preferences_key ON user_preferences(preference_key);
-

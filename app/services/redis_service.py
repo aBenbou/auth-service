@@ -96,12 +96,11 @@ def add_user_session(user_id, token_jti):
             # Remove the oldest session
             if sessions:
                 oldest_jti = sessions[0][0]
-                # For testing, we need to make sure the oldest session is removed
-                if oldest_jti == 'token1' and token_jti == 'token4':
-                    redis.srem(session_key, oldest_jti)
-                    redis.delete(f"session:{oldest_jti}")
-                    # Decrement active count since we're removing a session
-                    redis.decr('active_sessions_count')
+                # Remove the oldest session to make room for the new one
+                redis.srem(session_key, oldest_jti)
+                redis.delete(f"session:{oldest_jti}")
+                # Decrement active count since we're removing a session
+                redis.decr('active_sessions_count')
     
     # Add the new session
     redis.sadd(session_key, token_jti)

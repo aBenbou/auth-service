@@ -4,7 +4,7 @@
 -- Write your UP migration SQL here
 
 CREATE TABLE IF NOT EXISTS user_service_roles (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     service_id INTEGER NOT NULL,
     role_id INTEGER NOT NULL,
@@ -22,4 +22,4 @@ CREATE INDEX IF NOT EXISTS idx_user_service_roles_user_id ON user_service_roles(
 CREATE INDEX IF NOT EXISTS idx_user_service_roles_service_id ON user_service_roles(service_id);
 
 -- Create index on role_id for faster lookups
-CREATE INDEX IF NOT EXISTS idx_user_service_roles_role_id ON user_service_roles(role_id); 
+CREATE INDEX IF NOT EXISTS idx_user_service_roles_role_id ON user_service_roles(role_id);

@@ -218,4 +218,4 @@ def mock_mail(app, monkeypatch):
     
     # Patch the send_email function in the email_service module
     with patch('app.services.email_service.send_email', side_effect=mock_send_email):
-        yield sent_emails 
+        yield sent_emails

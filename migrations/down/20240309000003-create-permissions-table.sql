@@ -7,4 +7,4 @@
 DROP INDEX IF EXISTS idx_permissions_name;
 
 -- Drop the table
-DROP TABLE IF EXISTS permissions; 
+DROP TABLE IF EXISTS permissions CASCADE;
