@@ -18,6 +18,9 @@ services:
       - REDIS_PORT=6379
     volumes:
       - .:/app
+    networks:
+      - auth-network
+      - microservices-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 30s
@@ -38,6 +41,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres-init:/docker-entrypoint-initdb.d
+    networks:
+      - auth-network
+      - microservices-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -53,6 +59,9 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - auth-network
+      - microservices-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -70,7 +79,16 @@ services:
       - "5050:80"
     depends_on:
       - auth_db
+    networks:
+      - auth-network
+      - microservices-network
 
 volumes:
   postgres_data:
   redis_data:
+
+networks:
+  auth-network:
+    driver: bridge
+  microservices-network:
+    external: true
