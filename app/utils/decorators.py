@@ -4,7 +4,10 @@ from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
 
 from app.services.auth_service import get_user_by_id
 from app.services.token_service import validate_app_token
+from app.services.session_service import SessionService
+from app.utils.exceptions import RateLimitError
 
+session_service = SessionService()
 
 def jwt_required_with_permissions(permissions=None, service_name=None):
     """Decorator to check JWT and verify required permissions"""
@@ -83,3 +86,21 @@ def app_token_required(fn):
         return fn(*args, **kwargs)
         
     return wrapper 
+
+def rate_limit(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            user_id = getattr(g, 'user_id', None)
+            if user_id:
+                endpoint = request.endpoint
+                if not session_service.check_rate_limit(user_id, endpoint):
+                    raise RateLimitError("Rate limit exceeded")
+        except RateLimitError as e:
+            return jsonify({'error': str(e)}), 429
+        except Exception as e:
+            # Log error but allow request to proceed
+            current_app.logger.error(f"Rate limit check failed: {str(e)}")
+        
+        return f(*args, **kwargs)
+    return decorated_function 

@@ -76,3 +76,6 @@ class Config:
     GOOGLE_CALLBACK_URL = f"{APP_BASE_URL}/api/oauth/google/callback"
     MICROSOFT_CALLBACK_URL = f"{APP_BASE_URL}/api/oauth/microsoft/callback"
     DISCORD_CALLBACK_URL = f"{APP_BASE_URL}/api/oauth/discord/callback"
+    
+    # Rate Limiting
+    RATE_LIMIT = int(os.getenv('RATE_LIMIT', 60))  # requests per minute
