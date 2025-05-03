@@ -1,13 +1,17 @@
 from functools import wraps
-from flask import request, jsonify, g
+from flask import request, jsonify, g, current_app
 from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
 
 from app.services.auth_service import get_user_by_id
 from app.services.token_service import validate_app_token
 from app.services.session_service import SessionService
-from app.utils.exceptions import RateLimitError
+from app.utils.exceptions import RateLimitError, PermissionDeniedError, TokenInvalidError
 
-session_service = SessionService()
+def get_session_service():
+    """Get or create a session service instance."""
+    if not hasattr(g, 'session_service'):
+        g.session_service = SessionService()
+    return g.session_service
 
 def jwt_required_with_permissions(permissions=None, service_name=None):
     """Decorator to check JWT and verify required permissions"""
@@ -15,77 +19,45 @@ def jwt_required_with_permissions(permissions=None, service_name=None):
         @wraps(fn)
         def wrapper(*args, **kwargs):
             try:
-                # Verify JWT is present and valid
                 verify_jwt_in_request()
-                
-                # Get user identity from JWT
                 user_id = get_jwt_identity()
                 
-                # Get user from database
+                # Get user and verify permissions
                 user = get_user_by_id(user_id)
                 if not user:
-                    return jsonify({'success': False, 'message': 'User not found'}), 404
+                    raise TokenInvalidError("User not found")
                 
-                # Store user in g for access in the route
-                g.current_user = user
+                if permissions:
+                    if not user.has_permissions(permissions, service_name):
+                        raise PermissionDeniedError("Insufficient permissions")
                 
-                # If no permissions required, proceed
-                if not permissions:
-                    return fn(*args, **kwargs)
-                
-                # Get service ID if needed for permission check
-                service = None
-                if service_name:
-                    from app.models.service import Service
-                    service = Service.query.filter_by(name=service_name).first()
-                    
-                    if not service:
-                        return jsonify({'success': False, 'message': 'Service not found'}), 404
-                
-                # Use auth_service if no service specified
-                service_id = service.id if service else 1  # Assuming auth_service has ID 1
-                
-                # Check if user has all required permissions
-                for permission in permissions:
-                    if not user.has_permission(permission, service_id):
-                        return jsonify({
-                            'success': False, 
-                            'message': f'Permission denied: {permission} required'
-                        }), 403
+                # Store user in g for access in route
+                g.user = user
+                g.user_id = user_id
                 
                 return fn(*args, **kwargs)
-                
             except Exception as e:
-                return jsonify({'success': False, 'message': f'Authentication error: {str(e)}'}), 401
-                
+                return jsonify({'error': str(e)}), 401
         return wrapper
     return decorator
 
-
 def app_token_required(fn):
-    """Decorator to check for valid app token in Authorization header"""
+    """Decorator to verify app token"""
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
+        try:
+            token = request.headers.get('X-App-Token')
+            if not token:
+                return jsonify({'error': 'App token is required'}), 401
+            
+            if not validate_app_token(token):
+                return jsonify({'error': 'Invalid app token'}), 401
+            
+            return fn(*args, **kwargs)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 401
         
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'success': False, 'message': 'Missing or invalid Authorization header'}), 401
-        
-        # Extract token
-        token = auth_header.split('Bearer ')[1]
-        
-        # Validate token
-        service = validate_app_token(token)
-        
-        if not service:
-            return jsonify({'success': False, 'message': 'Invalid or expired token'}), 401
-        
-        # Store service in g for access in the route
-        g.current_service = service
-        
-        return fn(*args, **kwargs)
-        
-    return wrapper 
+    return wrapper
 
 def rate_limit(f):
     @wraps(f)
@@ -94,6 +66,7 @@ def rate_limit(f):
             user_id = getattr(g, 'user_id', None)
             if user_id:
                 endpoint = request.endpoint
+                session_service = get_session_service()
                 if not session_service.check_rate_limit(user_id, endpoint):
                     raise RateLimitError("Rate limit exceeded")
         except RateLimitError as e:
@@ -101,6 +74,6 @@ def rate_limit(f):
         except Exception as e:
             # Log error but allow request to proceed
             current_app.logger.error(f"Rate limit check failed: {str(e)}")
-        
+
         return f(*args, **kwargs)
-    return decorated_function 
+    return decorated_function

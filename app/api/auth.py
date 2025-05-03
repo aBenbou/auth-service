@@ -20,11 +20,8 @@ from app.services.redis_service import (
     get_active_sessions_count
 )
 from app.utils.decorators import jwt_required_with_permissions, rate_limit
-from app.services.session_service import SessionService
-from app.utils.exceptions import TokenRefreshError, RateLimitError
 
 auth_bp = Blueprint('auth', __name__)
-session_service = SessionService()
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
@@ -83,32 +80,38 @@ def login():
 
 @auth_bp.route('/logout', methods=['POST'])
 @jwt_required()
-@rate_limit
 def logout():
-    """Invalidate user session"""
-    try:
-        user_id = get_jwt_identity()
-        session_service.invalidate_session(user_id)
-        return jsonify({'message': 'Successfully logged out'}), 200
-    except Exception as e:
-        return jsonify({'error': 'Internal server error'}), 500
+    """Log out the current user"""
+    user_id = get_jwt_identity()
+    jti = get_jwt()['jti']
+    
+    result = logout_user(user_id, jti)
+    
+    if result['success']:
+        return jsonify(result), 200
+    else:
+        return jsonify(result), 400
 
 
 @auth_bp.route('/refresh', methods=['POST'])
+@jwt_required(refresh=True)
 @rate_limit
 def refresh_token():
-    """Refresh access token using refresh token"""
-    try:
-        refresh_token = request.json.get('refresh_token')
-        if not refresh_token:
-            return jsonify({'error': 'Refresh token is required'}), 400
-        
-        result = session_service.refresh_session(refresh_token)
-        return jsonify(result), 200
-    except TokenRefreshError as e:
-        return jsonify({'error': str(e)}), 401
-    except Exception as e:
-        return jsonify({'error': 'Internal server error'}), 500
+    """Get a new access token using refresh token"""
+    user_id = get_jwt_identity()
+    
+    # Verify user exists
+    user = get_user_by_id(user_id)
+    if not user:
+        return jsonify({'success': False, 'message': 'User not found'}), 404
+    
+    # Create a new access token
+    access_token = create_access_token(identity=user_id)
+    
+    return jsonify({
+        'success': True,
+        'access_token': access_token
+    }), 200
 
 
 @auth_bp.route('/change-password', methods=['POST'])

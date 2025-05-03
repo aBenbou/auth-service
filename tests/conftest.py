@@ -12,6 +12,7 @@ from app.models.service import Service
 from app.models.user_service_role import UserServiceRole
 from app.models.app_token import AppToken
 from app.services.redis_service import redis_client
+from app.services.session_service import SessionService
 
 
 @pytest.fixture
@@ -37,7 +38,9 @@ def app():
         'APP_BASE_URL': 'http://localhost:5000',
         'PASSWORD_RESET_TOKEN_EXPIRES': 3600,
         'MAIL_DEFAULT_SENDER': 'test@example.com',
-        'APP_NAME': 'Test Auth API'
+        'APP_NAME': 'Test Auth API',
+        'RATE_LIMIT_ENABLED': True,
+        'RATE_LIMIT_DEFAULT': '100/minute'
     })
     
     # Create a test context
@@ -67,6 +70,14 @@ def client(app):
 def db_session(app):
     """Create a new database session for a test."""
     yield db.session
+
+
+@pytest.fixture
+def session_service(app):
+    """Create a session service instance for testing."""
+    with app.app_context():
+        service = SessionService()
+        yield service
 
 
 @pytest.fixture

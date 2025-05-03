@@ -2,6 +2,9 @@ import pytest
 import json
 from flask import url_for
 from app.models.user import User
+from unittest.mock import patch, MagicMock
+from app.services.session_service import SessionService
+from app.utils.exceptions import TokenRefreshError
 
 
 def test_register_success(client, db_session, mock_mail):
@@ -157,46 +160,72 @@ def test_login_unverified_email(client, db_session):
     assert data['needs_verification'] is True
 
 
-def test_logout(client, test_user, user_token, mock_redis):
-    """Test logout."""
-    # Add session to Redis
-    mock_redis.incr('active_sessions_count')
-    mock_redis.sadd(f'user_sessions:{test_user.id}', 'test-jti')
-    mock_redis.hset(f'session:test-jti', 'user_id', test_user.id)
+@pytest.fixture
+def mock_session_service():
+    """Create a mock session service."""
+    with patch('app.routes.auth.session_service') as mock:
+        yield mock
+
+def test_logout_success(client, auth_headers, mock_session_service):
+    """Test successful logout."""
+    mock_session_service.invalidate_session.return_value = None
     
-    # Extract JTI from real token
-    from flask_jwt_extended import decode_token
-    token_data = decode_token(user_token['access_token'])
-    jti = token_data['jti']
-    
-    # Set up session in Redis with the actual JTI
-    mock_redis.sadd(f'user_sessions:{test_user.id}', jti)
-    mock_redis.hset(f'session:{jti}', 'user_id', test_user.id)
-    
-    response = client.post(
-        '/api/auth/logout',
-        headers={'Authorization': f'Bearer {user_token["access_token"]}'}
-    )
+    response = client.post('/api/auth/logout', headers=auth_headers)
     
     assert response.status_code == 200
-    data = json.loads(response.data)
-    assert data['success'] is True
+    assert response.json['message'] == 'Successfully logged out'
+    mock_session_service.invalidate_session.assert_called_once()
+
+def test_logout_error(client, auth_headers, mock_session_service):
+    """Test logout with error."""
+    mock_session_service.invalidate_session.side_effect = Exception("Session error")
     
-    # Check Redis (session should be removed)
-    assert mock_redis.sismember(f'user_sessions:{test_user.id}', jti) == 0
+    response = client.post('/api/auth/logout', headers=auth_headers)
+    
+    assert response.status_code == 500
+    assert 'error' in response.json
 
-
-def test_refresh_token(client, test_user, user_token):
-    """Test refreshing access token."""
-    response = client.post(
-        '/api/auth/refresh',
-        headers={'Authorization': f'Bearer {user_token["refresh_token"]}'}
-    )
+def test_refresh_token_success(client, mock_session_service):
+    """Test successful token refresh."""
+    refresh_token = "valid_refresh_token"
+    mock_session_service.refresh_session.return_value = {
+        'access_token': 'new_access_token',
+        'expires_in': 3600
+    }
+    
+    response = client.post('/api/auth/refresh', json={'refresh_token': refresh_token})
     
     assert response.status_code == 200
-    data = json.loads(response.data)
-    assert data['success'] is True
-    assert 'access_token' in data
+    assert 'access_token' in response.json
+    assert 'expires_in' in response.json
+    mock_session_service.refresh_session.assert_called_once_with(refresh_token)
+
+def test_refresh_token_missing(client):
+    """Test refresh token with missing token."""
+    response = client.post('/api/auth/refresh', json={})
+    
+    assert response.status_code == 400
+    assert 'error' in response.json
+
+def test_refresh_token_invalid(client, mock_session_service):
+    """Test refresh token with invalid token."""
+    refresh_token = "invalid_refresh_token"
+    mock_session_service.refresh_session.side_effect = TokenRefreshError("Invalid token")
+    
+    response = client.post('/api/auth/refresh', json={'refresh_token': refresh_token})
+    
+    assert response.status_code == 401
+    assert 'error' in response.json
+
+def test_refresh_token_error(client, mock_session_service):
+    """Test refresh token with unexpected error."""
+    refresh_token = "valid_refresh_token"
+    mock_session_service.refresh_session.side_effect = Exception("Unexpected error")
+    
+    response = client.post('/api/auth/refresh', json={'refresh_token': refresh_token})
+    
+    assert response.status_code == 500
+    assert 'error' in response.json
 
 
 def test_change_password(client, test_user, user_token, mock_redis):

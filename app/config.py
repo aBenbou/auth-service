@@ -7,7 +7,7 @@ class Config:
     DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
     
     # Database configuration
-    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URI', 'sqlite:///auth.db')
+    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URI', 'postgresql://postgres:postgres@postgres:5432/auth_db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # PostgreSQL-specific settings
