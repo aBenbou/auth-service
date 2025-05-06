@@ -77,3 +77,57 @@ def rate_limit(f):
 
         return f(*args, **kwargs)
     return decorated_function
+
+from jose import jwt, jwk
+from jose.utils import base64url_decode
+from flask import request, jsonify, g
+from functools import wraps
+import time
+import logging
+
+
+def cognito_jwt_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        auth_header = request.headers.get('Authorization', None)
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return jsonify({"msg": "Missing or invalid Authorization header"}), 401
+
+        token = auth_header.replace("Bearer ", "")
+        try:
+            # Decode header
+            unverified_header = jwt.get_unverified_header(token)
+            kid = unverified_header['kid']
+            
+            # Use the jwks variable that should be defined above or imported correctly
+            key = next((k for k in jwks if k['kid'] == kid), None)
+            if not key:
+                return jsonify({"msg": "Public key not found"}), 401
+
+            # Construct the public key
+            public_key = jwk.construct(key)
+            message, encoded_signature = str(token).rsplit('.', 1)
+            decoded_signature = base64url_decode(encoded_signature.encode('utf-8'))
+
+            if not public_key.verify(message.encode("utf8"), decoded_signature):
+                return jsonify({"msg": "Signature verification failed"}), 401
+
+            # Decode token with verification
+            claims = jwt.get_unverified_claims(token)
+            
+            # Check token expiration
+            current_time = time.time()
+            if claims.get("exp") < current_time:
+                return jsonify({"msg": "Token is expired"}), 401
+
+            # Set user info globally
+            g.current_user = claims
+            # Also set user_id for convenience
+            g.user_id = claims.get('sub')
+
+        except Exception as e:
+            logging.error(f"Token validation error: {str(e)}")
+            return jsonify({"msg": f"Token validation failed: {str(e)}"}), 401
+
+        return fn(*args, **kwargs)
+    return wrapper

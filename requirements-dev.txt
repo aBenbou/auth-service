@@ -6,3 +6,4 @@ coverage==7.3.1
 fakeredis==2.20.0
 responses==0.23.3
 freezegun==1.2.2 
+boto3==1.34.160

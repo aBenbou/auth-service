@@ -1,3 +1,7 @@
+import boto3
+import os
+import jwt 
+
 from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import (
     get_jwt_identity, 
@@ -9,9 +13,12 @@ from app.services.auth_service import (
     register_user,
     verify_email,
     login_user,
-    logout_user,
     change_password,
-    get_user_by_id
+    get_user_by_id,
+    get_secret_hash,
+    logout_user,
+    cognito_login_user,
+    change_password_authenticated
 )
 from app.services.redis_service import (
     get_user_sessions,
@@ -19,9 +26,20 @@ from app.services.redis_service import (
     invalidate_all_user_sessions,
     get_active_sessions_count
 )
-from app.utils.decorators import jwt_required_with_permissions, rate_limit
+from app.utils.decorators import (
+    jwt_required_with_permissions, 
+    rate_limit,
+    cognito_jwt_required
+)
+
 
 auth_bp = Blueprint('auth', __name__)
+
+
+USER_POOL_ID = os.getenv('USER_POOL_ID')
+CLIENT_ID = os.getenv('CLIENT_ID')
+CLIENT_SECRET = os.getenv('CLIENT_SECRET')
+client=boto3.client('cognito-idp', region_name='us-east-1')
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
@@ -31,24 +49,50 @@ def register():
     # Validate required fields
     if not data or not data.get('email') or not data.get('password'):
         return jsonify({'success': False, 'message': 'Email and password are required'}), 400
-    
-    result = register_user(
-        email=data.get('email'),
-        password=data.get('password'),
-        first_name=data.get('first_name'),
-        last_name=data.get('last_name')
-    )
-    
-    if result['success']:
-        return jsonify(result), 201
-    else:
-        return jsonify(result), 400
+    try:
+        secret_hash = get_secret_hash(data.get('email'), CLIENT_ID, CLIENT_SECRET)
+        # Create user in AWS Cognito
+        response = client.sign_up(
+            ClientId=CLIENT_ID,
+            SecretHash=secret_hash,
+            Username=data.get('email'),
+            Password=data.get('password'),
+            UserAttributes=[
+                {'Name': 'email', 'Value': data.get('email')},
+                {'Name': 'given_name', 'Value': data.get('first_name') or ''},
+                {'Name': 'family_name', 'Value': data.get('last_name') or ''}
+            ]
+        )
+        print("Cognito sign_up response:", response)
+
+        # Register user in local DB (no password saved locally)
+        result = register_user(
+            email=data.get('email'),
+            first_name=data.get('first_name'),
+            last_name=data.get('last_name'),
+            password=data.get('password')
+        )
+        if result['success']:
+            return jsonify(result), 201
+        else:
+            return jsonify(result), 400
+
+    except client.exceptions.UsernameExistsException:
+        return jsonify({'success': False, 'message': 'User already exists in Cognito'}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error registering user: {str(e)}'}), 500
 
 
-@auth_bp.route('/verify-email/<token>', methods=['GET'])
+
+@auth_bp.route('/verify-email/<token>', methods=['POST'])
 def verify_email_route(token):
     """Verify a user's email using token"""
-    result = verify_email(token)
+    data = request.get_json()
+    email = data.get('email')
+    if not email:
+        return jsonify({'success': False, 'message': 'Username is required'}), 400
+
+    result = verify_email(email, token, CLIENT_ID)
     
     if result['success']:
         return jsonify(result), 200
@@ -122,13 +166,19 @@ def change_password_route():
     jti = get_jwt()['jti']
     data = request.get_json()
     
+    user = get_user_by_id(user_id)
+    email = user.email
+
     # Validate required fields
     if not data or not data.get('current_password') or not data.get('new_password'):
         return jsonify({
             'success': False, 
             'message': 'Current password and new password are required'
         }), 400
-    
+
+    result = cognito_login_user(email, data.get('current_password'))
+    access_token = result['access_token']
+    change_password_authenticated(access_token, data.get('current_password'), data.get('new_password'))
     result = change_password(
         user_id=user_id,
         current_password=data.get('current_password'),
@@ -136,7 +186,6 @@ def change_password_route():
     )
     
     if result['success']:
-        # Keep current session but invalidate all others
         user = get_user_by_id(user_id)
         invalidate_all_user_sessions(user.id)
         
