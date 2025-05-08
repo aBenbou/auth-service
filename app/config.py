@@ -5,9 +5,10 @@ class Config:
     # Flask configuration
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-key-change-in-production')
     DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
-    
+
     # Database configuration
-    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URI', 'postgresql://postgres:postgres@postgres:5432/auth_db')
+    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URI', 'postgresql://postgres:usman@localhost:5432/auth_db')
+    print(SQLALCHEMY_DATABASE_URI)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # PostgreSQL-specific settings

@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, current_app
 from app.utils.decorators import jwt_required_with_permissions
 from app.services.role_service import (
     get_user_roles,
@@ -29,6 +29,7 @@ def get_user_roles_route(user_id, service_id):
     """Get all roles for a user in a specific service"""
     # Get user
     user = User.query.filter_by(public_id=user_id).first()
+    current_app.logger.info(f'Fetching roles for user {user_id} and service {service_id}')
     if not user:
         return jsonify({'success': False, 'message': 'User not found'}), 404
     
@@ -52,6 +53,7 @@ def assign_role(user_id, service_id, role_id):
     """Assign a role to a user for a specific service"""
     # Get user
     user = User.query.filter_by(public_id=user_id).first()
+    current_app.logger.info(f'Assigning role {role_id} to user {user_id} for service {service_id}')
     if not user:
         return jsonify({'success': False, 'message': 'User not found'}), 404
     
@@ -80,6 +82,7 @@ def remove_role(user_id, service_id, role_id):
     """Remove a role from a user for a specific service"""
     # Get user
     user = User.query.filter_by(public_id=user_id).first()
+    current_app.logger.info(f'Removing role {role_id} from user {user_id} for service {service_id}')
     if not user:
         return jsonify({'success': False, 'message': 'User not found'}), 404
     
@@ -107,7 +110,7 @@ def remove_role(user_id, service_id, role_id):
 def create_role_route(service_id):
     """Create a new role for a service"""
     data = request.get_json()
-    
+    current_app.logger.info(f'Creating new role for service {service_id} with data: {request.get_json()}')
     # Validate required fields
     if not data or not data.get('name'):
         return jsonify({'success': False, 'message': 'Role name is required'}), 400
@@ -136,7 +139,7 @@ def create_role_route(service_id):
 def update_role_route(role_id):
     """Update a role"""
     data = request.get_json()
-    
+    current_app.logger.info(f'Updating role {role_id} with data: {request.get_json()}')
     # Update role
     result = update_role(
         role_id=role_id,
@@ -156,7 +159,7 @@ def update_role_route(role_id):
 def delete_role_route(role_id):
     """Delete a role"""
     result = delete_role(role_id)
-    
+    current_app.logger.info(f'Deleting role {role_id}')
     if result['success']:
         return jsonify(result), 200
     else:
@@ -169,6 +172,7 @@ def get_service_roles(service_id):
     """Get all roles for a service"""
     # Get service
     service = get_service_by_id(service_id)
+    current_app.logger.info(f'Fetching roles for service {service_id}')
     if not service:
         return jsonify({'success': False, 'message': 'Service not found'}), 404
     
@@ -186,7 +190,7 @@ def get_service_roles(service_id):
 def get_permissions():
     """Get all available permissions"""
     permissions = Permission.query.all()
-    
+    current_app.logger.info('Fetching all permissions')
     return jsonify({
         'success': True,
         'permissions': [perm.to_dict() for perm in permissions]

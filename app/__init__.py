@@ -7,7 +7,7 @@ from flask_bcrypt import Bcrypt
 from flask_mail import Mail
 from flask_cors import CORS
 from dotenv import load_dotenv
-
+from app.log_config import configure_logging
 # Load environment variables
 load_dotenv()
 
@@ -20,10 +20,9 @@ mail = Mail()
 
 def create_app():
     app = Flask(__name__)
-    
     # Load configuration
     app.config.from_object('app.config.Config')
-    
+    configure_logging(app)
     # Initialize extensions with app
     db.init_app(app)
     migrate.init_app(app, db)
