@@ -18,7 +18,9 @@ from app.services.auth_service import (
     get_secret_hash,
     logout_user,
     cognito_login_user,
-    change_password_authenticated
+    change_password_authenticated,
+    CLIENT_ID,
+    CLIENT_SECRET,
 )
 from app.services.redis_service import (
     get_user_sessions,
@@ -35,10 +37,6 @@ from app.utils.decorators import (
 
 auth_bp = Blueprint('auth', __name__)
 
-
-USER_POOL_ID = os.getenv('USER_POOL_ID')
-CLIENT_ID = os.getenv('CLIENT_ID')
-CLIENT_SECRET = os.getenv('CLIENT_SECRET')
 client=boto3.client('cognito-idp', region_name='us-east-1')
 
 

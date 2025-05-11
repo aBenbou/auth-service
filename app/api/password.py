@@ -12,11 +12,9 @@ def forgot_password():
     if not data or not data.get('email'):
         current_app.logger.warning("Email is required.")
         return jsonify({'success': False, 'message': 'Email is required'}), 400
-    
-    # Process the request
+
     result = request_password_reset(data.get('email'))
-    
-    # Always return success to avoid email enumeration
+
     return jsonify(result), 200
 
 
@@ -26,11 +24,11 @@ def reset_password_route():
     data = request.get_json()
 
     # Validate required fields
-    if not data or not data.get('token') or not data.get('password'):
+    if not data or not data.get('token') or not data.get('password') or not data.get('email'):
         return jsonify({'success': False, 'message': 'Token and new password are required'}), 400
     
     # Process the request
-    result = reset_password(data.get('token'), data.get('password'))
+    result = reset_password(data.get('token'), data.get('password'), data.get('email'))
     
     if result['success']:
         return jsonify(result), 200

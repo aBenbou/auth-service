@@ -1,6 +1,5 @@
 import os
 import pytest
-import fakeredis
 from datetime import datetime, timedelta
 from flask_jwt_extended import create_access_token, create_refresh_token
 from unittest.mock import patch, MagicMock
@@ -14,8 +13,7 @@ from app.models.app_token import AppToken
 from app.services.redis_service import redis_client
 from app.services.session_service import SessionService
 
-
-@pytest.fixture
+@pytest.fixture(scope='session')
 def app():
     """Create and configure a Flask app for testing."""
     # Set test configurations
@@ -59,7 +57,6 @@ def app():
     # Pop the context
     ctx.pop()
 
-
 @pytest.fixture
 def client(app):
     """A test client for the app."""
@@ -83,11 +80,10 @@ def session_service(app):
 @pytest.fixture
 def mock_redis(monkeypatch):
     """Mock Redis client for testing."""
-    fake_redis = fakeredis.FakeRedis(decode_responses=True)
+    fake_redis = MagicMock()
     monkeypatch.setattr('app.services.redis_service.redis_client', fake_redis)
     monkeypatch.setattr('app.services.redis_service.get_redis', lambda: fake_redis)
     return fake_redis
-
 
 @pytest.fixture
 def test_user(db_session):
@@ -137,16 +133,13 @@ def admin_user(db_session, auth_service):
 @pytest.fixture
 def auth_service(db_session):
     """Create the auth service for testing."""
-    # Check if service already exists
-    service = Service.query.filter_by(name='auth_service').first()
-    if not service:
-        service = Service(
-            name='auth_service',
-            description='Authentication and Authorization Service',
-            is_active=True
-        )
-        db_session.add(service)
-        db_session.commit()
+    service = Service(
+        name='auth_service',
+        description='Authentication and Authorization Service',
+        is_active=True
+    )
+    db_session.add(service)
+    db_session.commit()
     return service
 
 

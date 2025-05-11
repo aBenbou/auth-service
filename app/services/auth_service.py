@@ -1,3 +1,4 @@
+import json
 import uuid
 import secrets
 import requests
@@ -16,10 +17,25 @@ import base64
 import boto3
 import os
 
+from botocore.exceptions import ClientError
+
+def get_secret(secret_name: str):
+    session = boto3.session.Session()
+    client = session.client(service_name="secretsmanager", region_name="us-east-1")
+    try:
+        secret = client.get_secret_value(SecretId=secret_name)
+        return secret["SecretString"]
+
+    except ClientError as err:
+        print("EXCEPTION: While fetching Secrets: ", err)
+        raise err
+
 
 client=boto3.client('cognito-idp', region_name='us-east-1')
-CLIENT_ID = os.getenv('CLIENT_ID')
-CLIENT_SECRET = os.getenv('CLIENT_SECRET')
+
+AUTH_SECRETS = json.loads(get_secret("auth_secrets"))
+CLIENT_ID = AUTH_SECRETS.get('CLIENT_ID')
+CLIENT_SECRET = AUTH_SECRETS.get('CLIENT_SECRET')
 
 def get_secret_hash(username, client_id, client_secret):
     message = username + client_id
@@ -66,10 +82,10 @@ def verify_email_with_cognito(username, confirmation_code, client_id):
     Returns:
     dict: Success or failure response with a message.
     """
-    client_secret = os.getenv('CLIENT_SECRET')
+
     try:
         # Call the confirm_sign_up API from AWS Cognito
-        secret_hash = get_secret_hash(username, client_id, client_secret)
+        secret_hash = get_secret_hash(username, client_id, CLIENT_SECRET)
             
         response = client.confirm_sign_up(
             ClientId=client_id,
@@ -103,9 +119,6 @@ def verify_email(username, confirmation_code, client_id):
 
 def cognito_login_user(email, password):
     try:
-        # CLIENT_ID = os.getenv('CLIENT_ID')
-        CLIENT_ID = "2i5c8ci25hs5jf6l5eb3fh78at"
-        CLIENT_SECRET = os.getenv('CLIENT_SECRET')
 
         secret_hash = get_secret_hash(email, CLIENT_ID, CLIENT_SECRET)
 
@@ -275,31 +288,44 @@ def request_password_reset(email):
     if not user:
         # Don't reveal whether the email exists for security reasons
         return {'success': True, 'message': 'If your email is registered, you will receive a password reset link'}
-    
-    # Generate reset token
-    reset_token = secrets.token_urlsafe(32)
-    expires = datetime.utcnow() + timedelta(seconds=current_app.config['PASSWORD_RESET_TOKEN_EXPIRES'])
-    
-    user.password_reset_token = reset_token
-    user.password_reset_expires = expires
-    db.session.commit()
-    
-    # Send reset email
-    send_password_reset_email(user)
-    
-    return {'success': True, 'message': 'If your email is registered, you will receive a password reset link'}
+
+    print(CLIENT_ID)
+    secret_hash = get_secret_hash(email, CLIENT_ID, CLIENT_SECRET)
+
+    try:
+        response = client.forgot_password(
+            ClientId=CLIENT_ID,
+            Username=email,
+            SecretHash=secret_hash,
+        )
+
+    except Exception as e:
+        print("Unexpected error:", str(e))
+        return {"error": str(e)}
+
+    return {'success': True, 'message': 'If your email is registered, you will receive a token'}
 
 
-def reset_password(token, new_password):
+def reset_password(token, new_password, email):
     """Reset a user's password using a valid reset token"""
-    user = User.query.filter_by(password_reset_token=token).first()
+    user = User.query.filter_by(email=email).first()
     
     if not user:
-        return {'success': False, 'message': 'Invalid or expired reset token'}
-    
-    if user.password_reset_expires and user.password_reset_expires < datetime.utcnow():
-        return {'success': False, 'message': 'Reset token has expired'}
-    
+        return {'success': False, 'message': 'User email not found'}
+
+    try:
+        secret_hash = get_secret_hash(email, CLIENT_ID, CLIENT_SECRET)
+        response = client.confirm_forgot_password(
+            ClientId=CLIENT_ID,
+            Username=email,
+            ConfirmationCode=token,
+            Password=new_password,
+            SecretHash=secret_hash,
+        )
+    except Exception as e:
+        print("Unexpected error:", str(e))
+        return {"error": str(e)}
+
     # Update password
     user.password = new_password
     user.password_reset_token = None
