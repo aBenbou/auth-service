@@ -5,6 +5,7 @@ from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
 from app.services.auth_service import get_user_by_id
 from app.services.token_service import validate_app_token
 from app.services.session_service import SessionService
+from app.services.service_service import get_service_by_name
 from app.utils.exceptions import RateLimitError, PermissionDeniedError, TokenInvalidError
 
 def get_session_service():
@@ -28,7 +29,52 @@ def jwt_required_with_permissions(permissions=None, service_name=None):
                     raise TokenInvalidError("User not found")
                 
                 if permissions:
-                    if not user.has_permissions(permissions, service_name):
+                    # Get service ID from request path if not provided
+                    service_id = None
+                    
+                    # First try to get service from service_name parameter
+                    if service_name:
+                        current_app.logger.info(f"Trying to get service by name: {service_name}")
+                        service = get_service_by_name(service_name)
+                        if not service:
+                            raise PermissionDeniedError(f"Service '{service_name}' not found")
+                        service_id = service.id
+                    
+                    # If no service_name provided, try to get from URL parameters
+                    if not service_id:
+                        current_app.logger.info(f"Trying to get service_id from URL parameters: {request.view_args}")
+                        service_id = request.view_args.get('service_id')
+                    
+                    # If still no service_id, try to get from request path
+                    if not service_id:
+                        # Try to extract service name from the endpoint
+                        endpoint = request.endpoint
+                        current_app.logger.info(f"Trying to get service from endpoint: {endpoint}")
+                        
+                        # Special case for roles blueprint - use auth_service
+                        if endpoint and endpoint.startswith('roles.'):
+                            current_app.logger.info("Using auth_service for roles blueprint")
+                            service = get_service_by_name('auth_service')
+                            if service:
+                                service_id = service.id
+                                current_app.logger.info(f"Found auth_service with ID: {service_id}")
+                        else:
+                            # Try to get service from the first part of the URL path
+                            path_parts = request.path.strip('/').split('/')
+                            if len(path_parts) >= 2:  # /api/service_name/...
+                                possible_service = path_parts[1]  # Get the service name from the path
+                                current_app.logger.info(f"Trying service name from path: {possible_service}")
+                                service = get_service_by_name(possible_service)
+                                if service:
+                                    service_id = service.id
+                                    current_app.logger.info(f"Found service with ID: {service_id}")
+                    
+                    if not service_id:
+                        current_app.logger.error("Could not determine service ID from any source")
+                        raise PermissionDeniedError("Service ID is required for permission check")
+                    
+                    current_app.logger.info(f"Checking permissions {permissions} for service {service_id}")
+                    if not user.has_permissions(permissions, service_id):
                         raise PermissionDeniedError("Insufficient permissions")
                 
                 # Store user in g for access in route
@@ -37,6 +83,7 @@ def jwt_required_with_permissions(permissions=None, service_name=None):
                 
                 return fn(*args, **kwargs)
             except Exception as e:
+                current_app.logger.error(f"Permission check failed: {str(e)}")
                 return jsonify({'error': str(e)}), 401
         return wrapper
     return decorator

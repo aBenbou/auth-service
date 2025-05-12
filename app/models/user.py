@@ -55,6 +55,17 @@ class User(db.Model):
             if role.has_permission(permission_name):
                 return True
         return False
+
+    def has_permissions(self, permission_names, service_id):
+        """Check if user has all specified permissions for a service"""
+        print(permission_names, 'permissions', service_id, 'service_id')
+        roles = self.get_roles_for_service(service_id)
+        print(roles, 'roles')
+        user_permissions = set()
+        for role in roles:
+            for perm in role.permissions:
+                user_permissions.add(perm.name)
+        return all(perm in user_permissions for perm in permission_names)
     
     def to_dict(self):
         return {

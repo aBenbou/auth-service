@@ -19,7 +19,17 @@ def initialize_default_roles():
         {'name': 'service:delete', 'description': 'Delete services'},
         {'name': 'token:read', 'description': 'Read tokens'},
         {'name': 'token:write', 'description': 'Create and update tokens'},
-        {'name': 'token:delete', 'description': 'Delete tokens'}
+        {'name': 'token:delete', 'description': 'Delete tokens'},
+        {'name': 'feedback:write', 'description': 'Permission to write feedback'},
+        {'name': 'feedback:read', 'description': 'Permission to read feedback'},
+        {'name': 'validator:write', 'description': 'Permission to write validations'},
+        {'name': 'validator:read', 'description': 'Permission to read validations'},
+        {'name': 'validation:read', 'description': 'Permission to read validation data'},
+        {'name': 'validation:write', 'description': 'Permission to write validation data'},
+        {'name': 'interaction:read', 'description': 'Permission to read interactions'},
+        {'name': 'interaction:write', 'description': 'Permission to write interactions'},
+        {'name': 'dataset:read', 'description': 'Permission to read datasets'},
+        {'name': 'dataset:write', 'description': 'Permission to write datasets'}
     ]
     
     for perm_data in default_permissions:

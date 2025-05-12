@@ -189,6 +189,7 @@ def get_service_roles(service_id):
 @jwt_required_with_permissions(['role:read'])
 def get_permissions():
     """Get all available permissions"""
+    print("Fetching all permissions")
     permissions = Permission.query.all()
     current_app.logger.info('Fetching all permissions')
     return jsonify({
