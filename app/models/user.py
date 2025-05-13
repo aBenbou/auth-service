@@ -45,6 +45,16 @@ class User(db.Model):
     def get_roles_for_service(self, service_id):
         """Get all roles for a specific service for this user"""
         from app.models.user_service_role import UserServiceRole
+        from app.services.service_service import get_service_by_id
+        
+        # Convert UUID string to internal ID if needed
+        if isinstance(service_id, str) and not service_id.isdigit():
+            service = get_service_by_id(service_id)
+            if service:
+                service_id = service.id
+            else:
+                return []  # Service not found
+        
         user_service_roles = UserServiceRole.query.filter_by(user_id=self.id, service_id=service_id).all()
         return [usr.role for usr in user_service_roles]
     

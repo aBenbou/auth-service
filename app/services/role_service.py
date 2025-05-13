@@ -57,7 +57,12 @@ def initialize_default_roles():
             'permissions': ['user:read', 'user:write', 'user:delete', 
                            'role:read', 'role:write', 'role:delete',
                            'service:read', 'service:write', 'service:delete',
-                           'token:read', 'token:write', 'token:delete']
+                           'token:read', 'token:write', 'token:delete',
+                           'feedback:write', 'feedback:read',
+                           'validator:write', 'validator:read',
+                           'validation:read', 'validation:write',
+                           'interaction:read', 'interaction:write',
+                           'dataset:read', 'dataset:write']
         },
         {
             'name': 'user_manager',

@@ -79,6 +79,7 @@ def jwt_required_with_permissions(permissions=None, service_name=None):
                 
                 # Store user in g for access in route
                 g.user = user
+                g.current_user = user
                 g.user_id = user_id
                 
                 return fn(*args, **kwargs)
