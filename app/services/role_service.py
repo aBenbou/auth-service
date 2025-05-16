@@ -3,6 +3,7 @@ from app.models.role import Role, Permission, RolePermission
 from app.models.service import Service
 from app.models.user_service_role import UserServiceRole
 from flask import current_app
+from app.models.user import User
 
 def initialize_default_roles():
     """Initialize default roles and permissions for the auth service itself"""
@@ -241,4 +242,44 @@ def delete_role(role_id):
     db.session.delete(role)
     db.session.commit()
     
-    return {'success': True, 'message': 'Role deleted successfully'} 
+    return {'success': True, 'message': 'Role deleted successfully'}
+
+
+def assign_default_role_to_users():
+    """Assign the readonly role to users who don't have any roles"""
+
+    auth_service = Service.query.filter_by(name='auth_service').first()
+    if not auth_service:
+        current_app.logger.error("Auth service not found")
+        return {'success': False, 'message': 'Auth service not found'}
+    
+    # Get the readonly role
+    readonly_role = Role.query.filter_by(name='readonly', service_id=auth_service.id).first()
+    if not readonly_role:
+        current_app.logger.error("Readonly role not found")
+        return {'success': False, 'message': 'Readonly role not found'}
+    
+    # Get all users
+    users = User.query.all()
+    assigned_count = 0
+    
+    for user in users:
+        existing_role = UserServiceRole.query.filter_by(
+            user_id=user.id,
+            service_id=auth_service.id
+        ).first()
+        
+        if not existing_role:
+            user_role = UserServiceRole(
+                user_id=user.id,
+                service_id=auth_service.id,
+                role_id=readonly_role.id
+            )
+            db.session.add(user_role)
+            assigned_count += 1
+    
+    if assigned_count > 0:
+        db.session.commit()
+        current_app.logger.info(f"Assigned readonly role to {assigned_count} users")
+    
+    return {'success': True, 'message': 'Role added successfully'}

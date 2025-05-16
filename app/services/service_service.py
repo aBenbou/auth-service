@@ -126,7 +126,7 @@ def get_services_for_user(user_id):
     user_service_roles = UserServiceRole.query.filter_by(user_id=user_id).distinct(UserServiceRole.service_id).all()
     service_ids = [usr.service_id for usr in user_service_roles]
     services = Service.query.filter(Service.id.in_(service_ids)).all()
-    return [service.to_dict() for service in services]
+    return [service.to_dict() for service in services] 
 
 
 def get_service_by_name(name):

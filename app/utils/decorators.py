@@ -5,7 +5,7 @@ from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
 from app.services.auth_service import get_user_by_id
 from app.services.token_service import validate_app_token
 from app.services.session_service import SessionService
-from app.services.service_service import get_service_by_name
+from app.services.service_service import get_service_by_name, get_service_by_id
 from app.utils.exceptions import RateLimitError, PermissionDeniedError, TokenInvalidError
 
 def get_session_service():
@@ -14,80 +14,152 @@ def get_session_service():
         g.session_service = SessionService()
     return g.session_service
 
+
 def jwt_required_with_permissions(permissions=None, service_name=None):
     """Decorator to check JWT and verify required permissions"""
+
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
             try:
                 verify_jwt_in_request()
                 user_id = get_jwt_identity()
-                
-                # Get user and verify permissions
+                current_app.logger.info(f"JWT verification successful for user ID: {user_id}")
+                current_app.logger.info(f"Checking permissions: {permissions} for service: {service_name}")
+
+                # Get user and verify existence
                 user = get_user_by_id(user_id)
                 if not user:
+                    current_app.logger.error(f"User {user_id} not found")
                     raise TokenInvalidError("User not found")
-                
-                if permissions:
-                    # Get service ID from request path if not provided
-                    service_id = None
-                    
-                    # First try to get service from service_name parameter
-                    if service_name:
-                        current_app.logger.info(f"Trying to get service by name: {service_name}")
-                        service = get_service_by_name(service_name)
-                        if not service:
-                            raise PermissionDeniedError(f"Service '{service_name}' not found")
+
+                # If no permissions required, just authenticate the user
+                if not permissions:
+                    g.user = user
+                    g.current_user = user
+                    g.user_id = user_id
+                    return fn(*args, **kwargs)
+
+                # Resolve service_id based on available information
+                service_id = None
+
+                # 1. Try to get service from provided service_name parameter
+                if service_name:
+                    current_app.logger.info(f"Looking up service by name: {service_name}")
+                    service = get_service_by_name(service_name)
+                    if service:
                         service_id = service.id
-                    
-                    # If no service_name provided, try to get from URL parameters
-                    if not service_id:
-                        current_app.logger.info(f"Trying to get service_id from URL parameters: {request.view_args}")
-                        service_id = request.view_args.get('service_id')
-                    
-                    # If still no service_id, try to get from request path
-                    if not service_id:
-                        # Try to extract service name from the endpoint
-                        endpoint = request.endpoint
-                        current_app.logger.info(f"Trying to get service from endpoint: {endpoint}")
-                        
-                        # Special case for roles blueprint - use auth_service
-                        if endpoint and endpoint.startswith('roles.'):
-                            current_app.logger.info("Using auth_service for roles blueprint")
-                            service = get_service_by_name('auth_service')
+                        print(service, 'serviceserviceservice')
+                        print(service_id, 'serviceserviceserviceservice')
+                        current_app.logger.info(f"Found service by name: {service_name}, ID: {service_id}")
+
+                # 2. If no service_id yet, try to get from URL parameters
+                if not service_id:
+                    service_id_param = request.view_args.get('service_id')
+                    if service_id_param:
+                        current_app.logger.info(f"Found service_id in URL parameters: {service_id_param}")
+                        # Handle both numeric IDs and UUID strings
+                        if isinstance(service_id_param, str) and not service_id_param.isdigit():
+                            service = get_service_by_id(service_id_param)
                             if service:
                                 service_id = service.id
-                                current_app.logger.info(f"Found auth_service with ID: {service_id}")
                         else:
-                            # Try to get service from the first part of the URL path
-                            path_parts = request.path.strip('/').split('/')
-                            if len(path_parts) >= 2:  # /api/service_name/...
-                                possible_service = path_parts[1]  # Get the service name from the path
-                                current_app.logger.info(f"Trying service name from path: {possible_service}")
-                                service = get_service_by_name(possible_service)
-                                if service:
-                                    service_id = service.id
-                                    current_app.logger.info(f"Found service with ID: {service_id}")
-                    
-                    if not service_id:
-                        current_app.logger.error("Could not determine service ID from any source")
-                        raise PermissionDeniedError("Service ID is required for permission check")
-                    
-                    current_app.logger.info(f"Checking permissions {permissions} for service {service_id}")
-                    if not user.has_permissions(permissions, service_id):
-                        raise PermissionDeniedError("Insufficient permissions")
-                
+                            service_id = service_id_param
+
+                # 3. If still no service_id, check endpoint for special cases
+                if not service_id:
+                    endpoint = request.endpoint
+                    current_app.logger.info(f"Checking endpoint for service info: {endpoint}")
+
+                    auth_related_patterns = [
+                        'roles.', 'permissions.', 'services.', 'users.', 'auth.',
+                        'login', 'register', 'reset_password', 'verify_email',
+                        'app_token', 'user_service_role'
+                    ]
+
+                    is_auth_endpoint = False
+                    if endpoint:
+                        for pattern in auth_related_patterns:
+                            if pattern in endpoint:
+                                is_auth_endpoint = True
+                                break
+
+                    # Check if URL path contains auth-related segments
+                    if not is_auth_endpoint:
+                        path = request.path.lower()
+                        auth_url_patterns = [
+                            '/api/auth/', '/api/roles/', '/api/permissions/',
+                            '/api/services/', '/api/users/', '/api/app-tokens/',
+                            '/auth/', '/roles/', '/permissions/'
+                        ]
+                        for pattern in auth_url_patterns:
+                            if pattern in path:
+                                is_auth_endpoint = True
+                                break
+
+                    if is_auth_endpoint:
+                        current_app.logger.info("Detected auth service related endpoint, using auth_service")
+                        service = get_service_by_name('auth_service')
+                        if service:
+                            service_id = service.id
+
+                    # Try to derive service name from endpoint prefix if still no service_id
+                    elif endpoint:
+                        parts = endpoint.split('.')
+                        if parts and len(parts) > 0:
+                            possible_service = parts[0]
+                            current_app.logger.info(
+                                f"Trying to derive service from endpoint prefix: {possible_service}")
+                            service = get_service_by_name(possible_service)
+                            if service:
+                                service_id = service.id
+
+                # 4. Last resort: try to extract from URL path
+                if not service_id:
+                    path_parts = request.path.strip('/').split('/')
+                    if len(path_parts) >= 2:
+                        possible_service = path_parts[1]
+                        current_app.logger.info(f"Trying to extract service from URL path: {possible_service}")
+                        service = get_service_by_name(possible_service)
+                        if service:
+                            service_id = service.id
+
+                # If we still couldn't determine service_id, fail with clear error
+                if not service_id:
+                    current_app.logger.error(f"Failed to determine service ID for permission check: {request.path}")
+                    raise PermissionDeniedError("Could not determine which service to check permissions for")
+
+                # Check permissions
+                current_app.logger.info(
+                    f"Checking if user {user_id} has permissions {permissions} for service {service_id}")
+                if not user.has_permissions(permissions, service_id):
+                    current_app.logger.warning(
+                        f"Permission denied: User {user_id} lacks permissions {permissions} for service {service_id}")
+                    raise PermissionDeniedError("Insufficient permissions")
+
                 # Store user in g for access in route
                 g.user = user
                 g.current_user = user
                 g.user_id = user_id
-                
+
                 return fn(*args, **kwargs)
+
+            except TokenInvalidError as e:
+                current_app.logger.error(f"Token invalid: {str(e)}")
+                return jsonify({'error': 'Invalid token', 'message': str(e)}), 401
+
+            except PermissionDeniedError as e:
+                current_app.logger.error(f"Permission denied: {str(e)}")
+                return jsonify({'error': 'Permission denied', 'message': str(e)}), 403
+
             except Exception as e:
-                current_app.logger.error(f"Permission check failed: {str(e)}")
-                return jsonify({'error': str(e)}), 401
+                current_app.logger.error(f"Authentication error: {str(e)}")
+                return jsonify({'error': 'Authentication failed', 'message': str(e)}), 401
+
         return wrapper
+
     return decorator
+
 
 def app_token_required(fn):
     """Decorator to verify app token"""

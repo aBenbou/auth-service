@@ -6,7 +6,8 @@ from app.services.role_service import (
     remove_role_from_user,
     create_role,
     update_role,
-    delete_role
+    delete_role,
+    assign_default_role_to_users
 )
 from app.services.service_service import (
     get_service_by_id,
@@ -276,4 +277,14 @@ def delete_service_route(service_id):
     if result['success']:
         return jsonify(result), 200
     else:
-        return jsonify(result), 400 
+        return jsonify(result), 400
+
+
+@roles_bp.route('/assign-default-roles', methods=['POST'])
+# @jwt_required_with_permissions(['role:write'])
+def assign_default_roles():
+    """Assign default roles to users who don't have any roles"""
+    result = assign_default_role_to_users()
+    if result['success']:
+        return jsonify(result), 200
+    return jsonify(result), 400
