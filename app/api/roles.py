@@ -7,7 +7,8 @@ from app.services.role_service import (
     create_role,
     update_role,
     delete_role,
-    assign_default_role_to_users
+    assign_default_role_to_users,
+    promote_to_validator
 )
 from app.services.service_service import (
     get_service_by_id,
@@ -20,6 +21,8 @@ from app.services.service_service import (
 from app.models.role import Role, Permission
 from app.models.user import User
 from app import db
+from app.models.service import Service
+from app.models.user_service_role import UserServiceRole
 
 roles_bp = Blueprint('roles', __name__)
 
@@ -281,10 +284,51 @@ def delete_service_route(service_id):
 
 
 @roles_bp.route('/assign-default-roles', methods=['POST'])
-# @jwt_required_with_permissions(['role:write'])
+@jwt_required_with_permissions(['role:write'])
 def assign_default_roles():
     """Assign default roles to users who don't have any roles"""
     result = assign_default_role_to_users()
     if result['success']:
         return jsonify(result), 200
     return jsonify(result), 400
+
+
+@roles_bp.route('/user/<user_id>/promote-to-validator', methods=['POST'])
+@jwt_required_with_permissions(['role:write'])
+def promote_to_validator_route(user_id):
+    """Promote a user to validator role"""
+    result = promote_to_validator(user_id)
+    if result['success']:
+        return jsonify(result), 200
+    return jsonify(result), 400
+
+
+@roles_bp.route('/debug/user-permissions', methods=['GET'])
+@jwt_required_with_permissions()
+def debug_user_permissions():
+    """Debug endpoint to check user permissions"""
+    user = g.user
+    auth_service = Service.query.filter_by(name='auth_service').first()
+    
+    if not auth_service:
+        return jsonify({'error': 'Auth service not found'}), 404
+    
+    # Get user's roles for auth_service
+    user_roles = UserServiceRole.query.filter_by(
+        user_id=user.id,
+        service_id=auth_service.id
+    ).all()
+    
+    # Get all permissions for these roles
+    permissions = set()
+    for user_role in user_roles:
+        role = Role.query.get(user_role.role_id)
+        if role:
+            for perm in role.permissions:
+                permissions.add(perm.name)
+    
+    return jsonify({
+        'user_id': user.public_id,
+        'roles': [ur.role.name for ur in user_roles],
+        'permissions': list(permissions)
+    }), 200

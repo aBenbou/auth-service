@@ -60,30 +60,30 @@ def register_user(email, first_name=None, last_name=None, password=None):
         is_email_verified=False,
     )
     user.password = password
-    
+
     db.session.add(user)
     db.session.commit()
 
-    # # Get the auth_service
-    # from app.models.service import Service
-    # auth_service = Service.query.filter_by(name='auth_service').first()
-    #
-    # if auth_service:
-    #     # Get the readonly role
-    #     from app.models.role import Role
-    #     readonly_role = Role.query.filter_by(name='readonly', service_id=auth_service.id).first()
-    #
-    #     if readonly_role:
-    #         # Assign the readonly role to the user
-    #         from app.models.user_service_role import UserServiceRole
-    #         user_role = UserServiceRole(
-    #             user_id=user.id,
-    #             service_id=auth_service.id,
-    #             role_id=readonly_role.id
-    #         )
-    #         db.session.add(user_role)
-    #         db.session.commit()
-    #         current_app.logger.info(f"Assigned readonly role to new user {user.email}")
+    # Get the auth_service
+    from app.models.service import Service
+    auth_service = Service.query.filter_by(name='auth_service').first()
+    
+    if auth_service:
+        # Get the regular_user role
+        from app.models.role import Role
+        regular_user_role = Role.query.filter_by(name='regular_user', service_id=auth_service.id).first()
+        
+        if regular_user_role:
+            # Assign the regular_user role to the user
+            from app.models.user_service_role import UserServiceRole
+            user_role = UserServiceRole(
+                user_id=user.id,
+                service_id=auth_service.id,
+                role_id=regular_user_role.id
+            )
+            db.session.add(user_role)
+            db.session.commit()
+            current_app.logger.info(f"Assigned regular_user role to new user {user.email}")
 
     return {'success': True, 'message': 'User registered successfully', 'user_id': user.public_id}
 

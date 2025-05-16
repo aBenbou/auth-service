@@ -49,8 +49,6 @@ def jwt_required_with_permissions(permissions=None, service_name=None):
                     service = get_service_by_name(service_name)
                     if service:
                         service_id = service.id
-                        print(service, 'serviceserviceservice')
-                        print(service_id, 'serviceserviceserviceservice')
                         current_app.logger.info(f"Found service by name: {service_name}, ID: {service_id}")
 
                 # 2. If no service_id yet, try to get from URL parameters

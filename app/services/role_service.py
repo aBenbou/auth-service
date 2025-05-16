@@ -9,6 +9,7 @@ def initialize_default_roles():
     """Initialize default roles and permissions for the auth service itself"""
     # Create default permissions if they don't exist
     default_permissions = [
+        # Existing Auth Service Permissions
         {'name': 'user:read', 'description': 'Read user information'},
         {'name': 'user:write', 'description': 'Create and update users'},
         {'name': 'user:delete', 'description': 'Delete users'},
@@ -21,16 +22,35 @@ def initialize_default_roles():
         {'name': 'token:read', 'description': 'Read tokens'},
         {'name': 'token:write', 'description': 'Create and update tokens'},
         {'name': 'token:delete', 'description': 'Delete tokens'},
-        {'name': 'feedback:write', 'description': 'Permission to write feedback'},
-        {'name': 'feedback:read', 'description': 'Permission to read feedback'},
-        {'name': 'validator:write', 'description': 'Permission to write validations'},
-        {'name': 'validator:read', 'description': 'Permission to read validations'},
-        {'name': 'validation:read', 'description': 'Permission to read validation data'},
-        {'name': 'validation:write', 'description': 'Permission to write validation data'},
-        {'name': 'interaction:read', 'description': 'Permission to read interactions'},
-        {'name': 'interaction:write', 'description': 'Permission to write interactions'},
-        {'name': 'dataset:read', 'description': 'Permission to read datasets'},
-        {'name': 'dataset:write', 'description': 'Permission to write datasets'}
+        
+        # Model Management Permissions
+        {'name': 'model:read', 'description': 'View deployed models'},
+        {'name': 'model:deploy', 'description': 'Deploy new models'},
+        {'name': 'model:delete', 'description': 'Remove deployed models'},
+        
+        # Dimension Management Permissions
+        {'name': 'dimension:read', 'description': 'View evaluation dimensions'},
+        {'name': 'dimension:write', 'description': 'Create and update dimensions'},
+        {'name': 'dimension:delete', 'description': 'Delete evaluation dimensions'},
+        
+        # Interaction Permissions
+        {'name': 'interaction:read', 'description': 'View model interactions'},
+        {'name': 'interaction:write', 'description': 'Create interactions with models'},
+        {'name': 'interaction:delete', 'description': 'Delete interactions'},
+        
+        # Feedback Permissions
+        {'name': 'feedback:read', 'description': 'View user feedback'},
+        {'name': 'feedback:write', 'description': 'Submit feedback on model outputs'},
+        {'name': 'feedback:delete', 'description': 'Delete feedback entries'},
+        
+        # Validation Permissions
+        {'name': 'validation:read', 'description': 'View validation status'},
+        {'name': 'validation:write', 'description': 'Validate user feedback'},
+        
+        # Dataset Permissions
+        {'name': 'dataset:read', 'description': 'View training datasets'},
+        {'name': 'dataset:write', 'description': 'Manage dataset entries'},
+        {'name': 'dataset:delete', 'description': 'Delete dataset entries'}
     ]
     
     for perm_data in default_permissions:
@@ -52,19 +72,27 @@ def initialize_default_roles():
     
     # Create default roles
     default_roles = [
+        # Existing Admin Role (with expanded permissions)
         {
             'name': 'admin',
             'description': 'Administrator with full access',
-            'permissions': ['user:read', 'user:write', 'user:delete', 
-                           'role:read', 'role:write', 'role:delete',
-                           'service:read', 'service:write', 'service:delete',
-                           'token:read', 'token:write', 'token:delete',
-                           'feedback:write', 'feedback:read',
-                           'validator:write', 'validator:read',
-                           'validation:read', 'validation:write',
-                           'interaction:read', 'interaction:write',
-                           'dataset:read', 'dataset:write']
+            'permissions': [
+                # Auth service permissions
+                'user:read', 'user:write', 'user:delete', 
+                'role:read', 'role:write', 'role:delete',
+                'service:read', 'service:write', 'service:delete',
+                'token:read', 'token:write', 'token:delete',
+                # Model feedback system permissions
+                'model:read', 'model:deploy', 'model:delete',
+                'dimension:read', 'dimension:write', 'dimension:delete',
+                'interaction:read', 'interaction:write', 'interaction:delete',
+                'feedback:read', 'feedback:write', 'feedback:delete',
+                'validation:read', 'validation:write',
+                'dataset:read', 'dataset:write', 'dataset:delete'
+            ]
         },
+        
+        # Existing Auth Service Roles
         {
             'name': 'user_manager',
             'description': 'Can manage users',
@@ -84,6 +112,55 @@ def initialize_default_roles():
             'name': 'readonly',
             'description': 'Read-only access',
             'permissions': ['user:read', 'role:read', 'service:read', 'token:read']
+        },
+        
+        # New Roles for Model Feedback System
+        {
+            'name': 'model_admin',
+            'description': 'Can deploy and manage models',
+            'permissions': [
+                'model:read', 'model:deploy', 'model:delete', 
+                'dimension:read', 'dimension:write', 'dimension:delete'
+            ]
+        },
+        {
+            'name': 'regular_user',
+            'description': 'Can interact with models and provide feedback',
+            'permissions': [
+                'model:read',
+                'dimension:read',
+                'interaction:read',   # Usually limited to own interactions
+                'interaction:write',  # To create new interactions
+                'feedback:read',      # To view their own feedback
+                'feedback:write'      # To submit feedback
+            ]
+        },
+        {
+            'name': 'validator',
+            'description': 'Can interact with models, provide auto-validated feedback, and validate others\' feedback',
+            'permissions': [
+                # All regular user permissions
+                'model:read',
+                'dimension:read',
+                'interaction:read',   
+                'interaction:write',  
+                'feedback:read',      
+                'feedback:write',
+                # Additional validator permissions     
+                'validation:read',    # To view validation queue
+                'validation:write',   # To validate others' feedback
+                'dataset:read'        # To view resulting datasets
+            ]
+        },
+        {
+            'name': 'dataset_manager',
+            'description': 'Can manage model training datasets',
+            'permissions': [
+                'dataset:read',
+                'dataset:write',
+                'dataset:delete',
+                'feedback:read'       # To view feedback that becomes part of datasets
+            ]
         }
     ]
     
@@ -98,7 +175,7 @@ def initialize_default_roles():
                 name=role_data['name'],
                 description=role_data['description'],
                 service_id=auth_service.id,
-                is_default=(role_data['name'] == 'readonly')  # Set readonly as default role
+                is_default=(role_data['name'] == 'regular_user')  # Set regular_user as default role
             )
             db.session.add(role)
             db.session.commit()
@@ -283,3 +360,45 @@ def assign_default_role_to_users():
         current_app.logger.info(f"Assigned readonly role to {assigned_count} users")
     
     return {'success': True, 'message': 'Role added successfully'}
+
+def promote_to_validator(user_id):
+    """Promote a user to validator role"""
+    from app.models.user import User
+    from app.models.service import Service
+    from app.models.role import Role
+    
+    # Get the auth_service
+    auth_service = Service.query.filter_by(name='auth_service').first()
+    if not auth_service:
+        return {'success': False, 'message': 'Auth service not found'}
+    
+    # Get the validator role
+    validator_role = Role.query.filter_by(name='validator', service_id=auth_service.id).first()
+    if not validator_role:
+        return {'success': False, 'message': 'Validator role not found'}
+    
+    # Get the user
+    user = User.query.filter_by(public_id=user_id).first()
+    if not user:
+        return {'success': False, 'message': 'User not found'}
+    
+    # Check if user already has validator role
+    existing_role = UserServiceRole.query.filter_by(
+        user_id=user.id,
+        service_id=auth_service.id,
+        role_id=validator_role.id
+    ).first()
+    
+    if existing_role:
+        return {'success': False, 'message': 'User already has validator role'}
+    
+    # Assign validator role
+    user_role = UserServiceRole(
+        user_id=user.id,
+        service_id=auth_service.id,
+        role_id=validator_role.id
+    )
+    db.session.add(user_role)
+    db.session.commit()
+    
+    return {'success': True, 'message': 'User promoted to validator successfully'}
