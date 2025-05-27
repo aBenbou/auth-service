@@ -22,7 +22,6 @@ coverage.xml
 
 # IDE configurations
 .idea/
-.vscode/
 *.sublime-project
 *.sublime-workspace
 .spyderproject
@@ -72,3 +71,7 @@ redis_data/
 
 # Local development settings
 docker-compose.override.yml 
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore
