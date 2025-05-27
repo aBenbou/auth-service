@@ -112,7 +112,25 @@ def jwt_required_with_permissions(permissions=None, service_name=None):
                             if service:
                                 service_id = service.id
 
-                # 4. Last resort: try to extract from URL path
+                # 4. Check JSON payload for 'service_id' (e.g., token creation)
+                if not service_id:
+                    try:
+                        json_payload = request.get_json(silent=True) or {}
+                        body_service_id = json_payload.get('service_id')
+                        if body_service_id:
+                            current_app.logger.info(
+                                f"Found service_id in JSON body: {body_service_id}")
+                            # Resolve if it's a UUID string
+                            if isinstance(body_service_id, str) and not body_service_id.isdigit():
+                                service = get_service_by_id(body_service_id)
+                                if service:
+                                    service_id = service.id
+                            else:
+                                service_id = body_service_id
+                    except Exception as json_e:
+                        current_app.logger.warning(f"Could not parse JSON body for service_id: {json_e}")
+
+                # 5. Last resort: try to extract from URL path
                 if not service_id:
                     path_parts = request.path.strip('/').split('/')
                     if len(path_parts) >= 2:
@@ -127,13 +145,29 @@ def jwt_required_with_permissions(permissions=None, service_name=None):
                     current_app.logger.error(f"Failed to determine service ID for permission check: {request.path}")
                     raise PermissionDeniedError("Could not determine which service to check permissions for")
 
-                # Check permissions
-                current_app.logger.info(
-                    f"Checking if user {user_id} has permissions {permissions} for service {service_id}")
+                # -----------------------------------------------------------------
+                # Permission check
+                # -----------------------------------------------------------------
                 if not user.has_permissions(permissions, service_id):
-                    current_app.logger.warning(
-                        f"Permission denied: User {user_id} lacks permissions {permissions} for service {service_id}")
-                    raise PermissionDeniedError("Insufficient permissions")
+                    # -----------------------------------------------------------------
+                    # Super-admin override: if the user holds the required permissions
+                    # for the *auth_service* (where global admin roles live), grant
+                    # access even when the target service is different. This avoids
+                    # having to duplicate admin roles / permissions for every new
+                    # business service while still keeping RBAC logic centralised.
+                    # -----------------------------------------------------------------
+                    auth_service = get_service_by_name('auth_service')
+                    super_admin = False
+                    if auth_service:
+                        super_admin = user.has_permissions(permissions, auth_service.id)
+
+                    if not super_admin:
+                        current_app.logger.warning(
+                            f"Permission denied: User {user_id} lacks permissions {permissions} for service {service_id}")
+                        raise PermissionDeniedError("Insufficient permissions")
+                    else:
+                        current_app.logger.info(
+                            f"Super-admin override: user {user_id} allowed to access service {service_id} using auth_service permissions")
 
                 # Store user in g for access in route
                 g.user = user
